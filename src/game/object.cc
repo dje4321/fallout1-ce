@@ -2691,7 +2691,7 @@ int obj_intersects_with(Object* object, int x, int y)
                     if (data[width * (y - minY) + x - minX] != 0) {
                         flags |= 0x01;
 
-                        if ((object->flags & OBJECT_FLAG_0xFC000) != 0) {
+                        if ((object->flags & OBJECT_TRANSPARENT) != 0) {
                             if ((object->flags & OBJECT_TRANS_NONE) == 0) {
                                 flags &= ~0x03;
                                 flags |= 0x02;
@@ -4691,7 +4691,7 @@ static void obj_render_object(Object* object, Rect* rect, int light)
     }
 
     if (type == 2 || type == 3) {
-        if ((obj_dude->flags & OBJECT_HIDDEN) == 0 && (object->flags & OBJECT_FLAG_0xFC000) == 0) {
+        if ((obj_dude->flags & OBJECT_HIDDEN) == 0 && (object->flags & OBJECT_TRANSPARENT) == 0) {
             Proto* proto;
             proto_ptr(object->pid, &proto);
 
@@ -4808,7 +4808,7 @@ static void obj_render_object(Object* object, Rect* rect, int light)
         }
     }
 
-    switch (object->flags & OBJECT_FLAG_0xFC000) {
+    switch (object->flags & OBJECT_TRANSPARENT) {
     case OBJECT_TRANS_RED:
         dark_translucent_trans_buf_to_buf(src, objectWidth, objectHeight, frameWidth, back_buf, objectRect.ulx, objectRect.uly, buf_full, light, redBlendTable, commonGrayTable);
         break;

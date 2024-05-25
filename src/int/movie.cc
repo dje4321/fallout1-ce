@@ -44,13 +44,12 @@ static int blitAlpha(int win, unsigned char* data, int width, int height, int pi
 static int movieScaleWindow(int win, unsigned char* data, int width, int height, int pitch);
 static int blitNormal(int win, unsigned char* data, int width, int height, int pitch);
 static void movieSetPalette(unsigned char* palette, int start, int end);
-static int noop();
-static void cleanupMovie(int a1);
+static void cleanupMovie(bool inProgress);
 static void cleanupLast();
 static DB_FILE* openFile(char* filePath);
 static void openSubtitle(char* filePath);
 static void doSubtitle();
-static int movieStart(int win, char* filePath, int (*a3)());
+static int movieStart(int win, char* filePath);
 static bool localMovieCallback();
 static int stepMovie();
 
@@ -477,12 +476,6 @@ static void movieSetPalette(unsigned char* palette, int start, int end)
     }
 }
 
-// 0x478C18
-static int noop()
-{
-    return 0;
-}
-
 // 0x478C1C
 void initMovie()
 {
@@ -493,7 +486,7 @@ void initMovie()
 }
 
 // 0x478CA8
-static void cleanupMovie(int a1)
+static void cleanupMovie(bool inProgress)
 {
     if (!running) {
         return;
@@ -525,7 +518,7 @@ static void cleanupMovie(int a1)
         gMovieSdlSurface = NULL;
     }
 
-    if (a1) {
+    if (inProgress) {
         _MVE_rmEndMovie();
     }
 
@@ -571,7 +564,7 @@ static void cleanupMovie(int a1)
 // 0x478F2C
 void movieClose()
 {
-    cleanupMovie(1);
+    cleanupMovie(true);
 
     if (lastMovieBuffer) {
         myfree(lastMovieBuffer, __FILE__, __LINE__); // "..\\int\\MOVIE.C", 869
@@ -762,8 +755,8 @@ static void doSubtitle()
         return;
     }
 
-    int v1 = text_height();
-    int v2 = (480 - lastMovieH - lastMovieY - v1) / 2 + lastMovieH + lastMovieY;
+    int textY = text_height();
+    int v2 = (480 - lastMovieH - lastMovieY - textY) / 2 + lastMovieH + lastMovieY;
 
     if (subtitleH + v2 > windowGetYres()) {
         subtitleH = windowGetYres() - v2;
@@ -810,7 +803,7 @@ static void doSubtitle()
 }
 
 // 0x479514
-static int movieStart(int win, char* filePath, int (*a3)())
+static int movieStart(int win, char* filePath)
 {
     int v15;
     int v16;
@@ -839,7 +832,6 @@ static int movieStart(int win, char* filePath, int (*a3)())
         debug_printf("Direct ");
         win_get_rect(GNWWin, &winRect);
         debug_printf("Playing at (%d, %d)  ", movieX + winRect.ulx, movieY + winRect.uly);
-        _MVE_rmCallbacks(a3);
         _MVE_sfCallbacks(movie_MVE_ShowFrame);
 
         v17 = 0;
@@ -847,7 +839,6 @@ static int movieStart(int win, char* filePath, int (*a3)())
         v15 = movieX + winRect.ulx;
     } else {
         debug_printf("Buffered ");
-        _MVE_rmCallbacks(a3);
         _MVE_sfCallbacks(movieShowFrame);
         v17 = 0;
         v16 = 0;
@@ -919,7 +910,7 @@ int movieRun(int win, char* filePath)
     movieW = win_width(win);
     movieH = win_height(win);
     movieSubRectFlag = 0;
-    return movieStart(win, filePath, noop);
+    return movieStart(win, filePath);
 }
 
 // 0x479920
@@ -936,7 +927,7 @@ int movieRunRect(int win, char* filePath, int a3, int a4, int a5, int a6)
     movieH = a6;
     movieSubRectFlag = 1;
 
-    return movieStart(win, filePath, noop);
+    return movieStart(win, filePath);
 }
 
 // 0x479980
@@ -980,18 +971,18 @@ void movieUpdate()
 
     if ((movieFlags & MOVIE_EXTENDED_FLAG_0x02) != 0) {
         debug_printf("Movie aborted\n");
-        cleanupMovie(1);
+        cleanupMovie(true);
         return;
     }
 
     if ((movieFlags & MOVIE_EXTENDED_FLAG_0x01) != 0) {
         debug_printf("Movie error\n");
-        cleanupMovie(1);
+        cleanupMovie(true);
         return;
     }
 
     if (stepMovie() == -1) {
-        cleanupMovie(1);
+        cleanupMovie(true);
         return;
     }
 

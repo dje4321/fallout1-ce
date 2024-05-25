@@ -1154,7 +1154,7 @@ void proto_reset()
 
     obj_dude->pid = 0x1000000;
     obj_dude->sid = -1;
-    obj_dude->flags &= ~OBJECT_FLAG_0xFC000;
+    obj_dude->flags &= ~OBJECT_TRANSPARENT; // ANDs the inverse of OBJECT_TRANSPARENT bit flags to ensure character is always visible
 
     // NOTE: Uninline.
     proto_remove_all();

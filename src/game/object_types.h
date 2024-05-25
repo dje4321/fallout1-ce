@@ -84,7 +84,7 @@ typedef enum ObjectFlags {
 
     OBJECT_IN_ANY_HAND = OBJECT_IN_LEFT_HAND | OBJECT_IN_RIGHT_HAND,
     OBJECT_EQUIPPED = OBJECT_IN_ANY_HAND | OBJECT_WORN,
-    OBJECT_FLAG_0xFC000 = OBJECT_TRANS_ENERGY | OBJECT_TRANS_STEAM | OBJECT_TRANS_GLASS | OBJECT_TRANS_WALL | OBJECT_TRANS_NONE | OBJECT_TRANS_RED,
+    OBJECT_TRANSPARENT = OBJECT_TRANS_ENERGY | OBJECT_TRANS_STEAM | OBJECT_TRANS_GLASS | OBJECT_TRANS_WALL | OBJECT_TRANS_NONE | OBJECT_TRANS_RED,
     OBJECT_OPEN_DOOR = OBJECT_SHOOT_THRU | OBJECT_LIGHT_THRU | OBJECT_NO_BLOCK,
 } ObjectFlags;
 
@@ -275,7 +275,7 @@ typedef struct Object {
         int field_2C_array[14];
         ObjectData data;
     };
-    int pid; // obj_pid
+    int pid; // object proto_id
     int cid; // obj_cid
     int lightDistance; // obj_light_distance
     int lightIntensity; // obj_light_intensity

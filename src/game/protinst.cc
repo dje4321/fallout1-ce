@@ -150,32 +150,32 @@ int obj_new_sid_inst(Object* obj, int scriptType, int a3)
 }
 
 // 0x48A1FC
-int obj_look_at(Object* a1, Object* a2)
+int obj_look_at(Object* critter, Object* target)
 {
-    return obj_look_at_func(a1, a2, display_print);
+    return obj_look_at_func(critter, target, display_print);
 }
 
 // 0x48A20C
-int obj_look_at_func(Object* a1, Object* a2, void (*a3)(char* string))
+int obj_look_at_func(Object* critter, Object* target, void (*callback)(char* string))
 {
     int sid = -1;
     bool scriptOverrides = false;
 
-    if (critter_is_dead(a1)) {
+    if (critter_is_dead(critter)) {
         return -1;
     }
 
-    if (FID_TYPE(a2->fid) == OBJ_TYPE_TILE) {
+    if (FID_TYPE(target->fid) == OBJ_TYPE_TILE) {
         return -1;
     }
 
     Proto* proto;
-    if (proto_ptr(a2->pid, &proto) == -1) {
+    if (proto_ptr(target->pid, &proto) == -1) {
         return -1;
     }
 
-    if (obj_sid(a2, &sid) != -1) {
-        scr_set_objs(sid, a1, a2);
+    if (obj_sid(target, &sid) != -1) {
+        scr_set_objs(sid, critter, target);
         exec_script_proc(sid, SCRIPT_PROC_LOOK_AT);
 
         Script* script;
@@ -189,19 +189,22 @@ int obj_look_at_func(Object* a1, Object* a2, void (*a3)(char* string))
     if (!scriptOverrides) {
         MessageListItem messageListItem;
 
-        if (PID_TYPE(a2->pid) == OBJ_TYPE_CRITTER && critter_is_dead(a2)) {
+        if (PID_TYPE(target->pid) == OBJ_TYPE_CRITTER && critter_is_dead(target)) {
+            // 491: You see a dead: %s.
+            // 492: You see the remains of: %s.
             messageListItem.num = 491 + roll_random(0, 1);
         } else {
+            // 490: You see: %s.
             messageListItem.num = 490;
         }
 
         if (message_search(&proto_main_msg_file, &messageListItem)) {
-            const char* objectName = object_name(a2);
+            const char* objectName = object_name(target);
 
             char formattedText[260];
             snprintf(formattedText, sizeof(formattedText), messageListItem.text, objectName);
 
-            a3(formattedText);
+            callback(formattedText);
         }
     }
 
@@ -209,19 +212,19 @@ int obj_look_at_func(Object* a1, Object* a2, void (*a3)(char* string))
 }
 
 // 0x48A338
-int obj_examine(Object* a1, Object* a2)
+int obj_examine(Object* critter, Object* target)
 {
-    return obj_examine_func(a1, a2, display_print);
+    return obj_examine_func(critter, target, display_print);
 }
 
 // Performs examine (reading description) action and passes resulting text
 // to given callback.
 //
 // [critter] is a critter who's performing an action. Can be NULL.
-// [fn] can be called up to three times when [a2] is an ammo.
+// [callback] can be called up to three times when [a2] is an ammo.
 //
 // 0x48A348
-int obj_examine_func(Object* critter, Object* target, void (*fn)(char* string))
+int obj_examine_func(Object* critter, Object* target, void (*callback)(char* string))
 {
     int sid = -1;
     bool scriptOverrides = false;
@@ -258,10 +261,10 @@ int obj_examine_func(Object* critter, Object* target, void (*fn)(char* string))
             if (!message_search(&proto_main_msg_file, &messageListItem)) {
                 debug_printf("\nError: Can't find msg num!");
             }
-            fn(messageListItem.text);
+            callback(messageListItem.text);
         } else {
             if (PID_TYPE(target->pid) != OBJ_TYPE_CRITTER || !critter_is_dead(target)) {
-                fn(description);
+                callback(description);
             }
         }
     }
@@ -359,32 +362,37 @@ int obj_examine_func(Object* critter, Object* target, void (*fn)(char* string))
                 strcat(formattedText, endingMessageListItem.text);
             }
         } else {
-            int v12 = 0;
+            int crippleOffset = 0;
             if (critter_is_crippled(target)) {
-                v12 -= 2;
+                crippleOffset -= 2;
             }
 
-            int v16;
+            int healthMsgOffset;
 
             const int maxiumHitPoints = stat_level(target, STAT_MAXIMUM_HIT_POINTS);
             const int currentHitPoints = stat_level(target, STAT_CURRENT_HIT_POINTS);
             if (currentHitPoints <= 0 || critter_is_dead(target)) {
-                v16 = 0;
+                healthMsgOffset = 0;
             } else if (currentHitPoints == maxiumHitPoints) {
-                v16 = 4;
+                healthMsgOffset = 4;
             } else {
-                v16 = (currentHitPoints * 3) / maxiumHitPoints + 1;
+                healthMsgOffset = (currentHitPoints * 3) / maxiumHitPoints + 1;
             }
 
             MessageListItem hpMessageListItem;
-            hpMessageListItem.num = 500 + v16;
+            // 500: Dead
+            // 501: Almost Dead
+            // 502: Severely Wounded
+            // 503: Wounded
+            // 504: Unhurt
+            hpMessageListItem.num = 500 + healthMsgOffset;
             if (!message_search(&proto_main_msg_file, &hpMessageListItem)) {
                 debug_printf("\nError: Can't find msg num!");
                 exit(1);
             }
 
-            if (v16 > 4) {
-                // Error: lookup_val out of range
+            if (healthMsgOffset > 4) {
+                // 550: \nError: lookup_val out of range
                 hpMessageListItem.num = 550;
                 if (!message_search(&proto_main_msg_file, &hpMessageListItem)) {
                     debug_printf("\nError: Can't find msg num!");
@@ -395,32 +403,29 @@ int obj_examine_func(Object* critter, Object* target, void (*fn)(char* string))
                 return 0;
             }
 
-            MessageListItem v66;
+            MessageListItem examineMsg;
             if (target == obj_dude) {
-                // You look %s
-                v66.num = 520 + v12;
-                if (!message_search(&proto_main_msg_file, &v66)) {
+                // 520: You look %s.
+                // 518: You look: %s
+                examineMsg.num = 520 + crippleOffset;
+                if (!message_search(&proto_main_msg_file, &examineMsg)) {
                     debug_printf("\nError: Can't find msg num!");
                     exit(1);
                 }
 
-                snprintf(formattedText, sizeof(formattedText), v66.text, hpMessageListItem.text);
+                snprintf(formattedText, sizeof(formattedText), examineMsg.text, hpMessageListItem.text);
             } else {
-                // %s %s
-                v66.num = 521 + v12;
-                if (!message_search(&proto_main_msg_file, &v66)) {
+                MessageListItem examineMsg;
+                // 522: He looks: %s.
+                // 523: She looks: %s.
+                // 524: It looks: %s.
+                examineMsg.num = 522 + stat_level(target, STAT_GENDER);
+                if (!message_search(&proto_main_msg_file, &examineMsg)) {
                     debug_printf("\nError: Can't find msg num!");
                     exit(1);
                 }
 
-                MessageListItem v63;
-                v63.num = 522 + stat_level(target, STAT_GENDER);
-                if (!message_search(&proto_main_msg_file, &v63)) {
-                    debug_printf("\nError: Can't find msg num!");
-                    exit(1);
-                }
-
-                snprintf(formattedText, sizeof(formattedText), v66.text, v63.text, hpMessageListItem.text);
+                snprintf(formattedText, sizeof(formattedText), examineMsg.text, hpMessageListItem.text);
             }
         }
 
@@ -428,22 +433,26 @@ int obj_examine_func(Object* critter, Object* target, void (*fn)(char* string))
             const int maxiumHitPoints = stat_level(target, STAT_MAXIMUM_HIT_POINTS);
             const int currentHitPoints = stat_level(target, STAT_CURRENT_HIT_POINTS);
 
-            MessageListItem v63;
-            v63.num = maxiumHitPoints >= currentHitPoints ? 531 : 530;
+            MessageListItem crippleMsg;
+            // 530: and has crippled limbs.
+            // 531: but has crippled limbs.
+            crippleMsg.num = maxiumHitPoints >= currentHitPoints ? 531 : 530;
 
             if (target == obj_dude) {
-                v63.num += 2;
+                // 532: and have crippled limbs.
+                // 533: but have crippled limbs.
+                crippleMsg.num += 2;
             }
 
-            if (!message_search(&proto_main_msg_file, &v63)) {
+            if (!message_search(&proto_main_msg_file, &crippleMsg)) {
                 debug_printf("\nError: Can't find msg num!");
                 exit(1);
             }
 
-            strcat(formattedText, v63.text);
+            strcat(formattedText, crippleMsg.text);
         }
 
-        fn(formattedText);
+        callback(formattedText);
     } else if (type == OBJ_TYPE_ITEM) {
         int itemType = item_get_type(target);
         if (itemType == ITEM_TYPE_WEAPON) {
@@ -460,7 +469,7 @@ int obj_examine_func(Object* critter, Object* target, void (*fn)(char* string))
                 int ammoCapacity = item_w_max_ammo(target);
                 int ammoQuantity = item_w_curr_ammo(target);
                 snprintf(formattedText, sizeof(formattedText), weaponMessageListItem.text, ammoQuantity, ammoCapacity, ammoName);
-                fn(formattedText);
+                callback(formattedText);
             }
         }
     }
@@ -1479,14 +1488,14 @@ int obj_use_skill_on(Object* source, Object* target, int skill)
 }
 
 // 0x48BE14
-bool obj_is_a_portal(Object* obj)
+bool obj_is_a_portal(Object* target)
 {
-    if (obj == NULL) {
+    if (target == NULL) {
         return false;
     }
 
     Proto* proto;
-    if (proto_ptr(obj->pid, &proto) == -1) {
+    if (proto_ptr(target->pid, &proto) == -1) {
         return false;
     }
 
@@ -1494,19 +1503,19 @@ bool obj_is_a_portal(Object* obj)
 }
 
 // 0x48BE4C
-bool obj_is_lockable(Object* obj)
+bool obj_is_lockable(Object* target)
 {
     Proto* proto;
 
-    if (obj == NULL) {
+    if (target == NULL) {
         return false;
     }
 
-    if (proto_ptr(obj->pid, &proto) == -1) {
+    if (proto_ptr(target->pid, &proto) == -1) {
         return false;
     }
 
-    switch (PID_TYPE(obj->pid)) {
+    switch (PID_TYPE(target->pid)) {
     case OBJ_TYPE_ITEM:
         if (proto->item.type == ITEM_TYPE_CONTAINER) {
             return true;
@@ -1523,14 +1532,14 @@ bool obj_is_lockable(Object* obj)
 }
 
 // 0x48BE9C
-bool obj_is_locked(Object* obj)
+bool obj_is_locked(Object* target)
 {
-    if (obj == NULL) {
+    if (target == NULL) {
         return false;
     }
 
-    ObjectData* data = &(obj->data);
-    switch (PID_TYPE(obj->pid)) {
+    ObjectData* data = &(target->data);
+    switch (PID_TYPE(target->pid)) {
     case OBJ_TYPE_ITEM:
         return data->flags & CONTAINER_FLAG_LOCKED;
     case OBJ_TYPE_SCENERY:
@@ -1541,18 +1550,18 @@ bool obj_is_locked(Object* obj)
 }
 
 // 0x48BEE0
-int obj_lock(Object* object)
+int obj_lock(Object* target)
 {
-    if (object == NULL) {
+    if (target == NULL) {
         return -1;
     }
 
-    switch (PID_TYPE(object->pid)) {
+    switch (PID_TYPE(target->pid)) {
     case OBJ_TYPE_ITEM:
-        object->data.flags |= OBJ_LOCKED;
+        target->data.flags |= OBJ_LOCKED;
         break;
     case OBJ_TYPE_SCENERY:
-        object->data.scenery.door.openFlags |= OBJ_LOCKED;
+        target->data.scenery.door.openFlags |= OBJ_LOCKED;
         break;
     default:
         return -1;
@@ -1562,18 +1571,18 @@ int obj_lock(Object* object)
 }
 
 // 0x48BF24
-int obj_unlock(Object* object)
+int obj_unlock(Object* target)
 {
-    if (object == NULL) {
+    if (target == NULL) {
         return -1;
     }
 
-    switch (PID_TYPE(object->pid)) {
+    switch (PID_TYPE(target->pid)) {
     case OBJ_TYPE_ITEM:
-        object->data.flags &= ~OBJ_LOCKED;
+        target->data.flags &= ~OBJ_LOCKED;
         return 0;
     case OBJ_TYPE_SCENERY:
-        object->data.scenery.door.openFlags &= ~OBJ_LOCKED;
+        target->data.scenery.door.openFlags &= ~OBJ_LOCKED;
         return 0;
     }
 
@@ -1581,19 +1590,19 @@ int obj_unlock(Object* object)
 }
 
 // 0x48BF68
-bool obj_is_openable(Object* obj)
+bool obj_is_openable(Object* target)
 {
     Proto* proto;
 
-    if (obj == NULL) {
+    if (target == NULL) {
         return false;
     }
 
-    if (proto_ptr(obj->pid, &proto) == -1) {
+    if (proto_ptr(target->pid, &proto) == -1) {
         return false;
     }
 
-    switch (PID_TYPE(obj->pid)) {
+    switch (PID_TYPE(target->pid)) {
     case OBJ_TYPE_ITEM:
         if (proto->item.type == ITEM_TYPE_CONTAINER) {
             return true;
@@ -1610,46 +1619,46 @@ bool obj_is_openable(Object* obj)
 }
 
 // 0x48BFB8
-int obj_is_open(Object* object)
+int obj_is_open(Object* target)
 {
-    return object->frame != 0;
+    return target->frame != 0;
 }
 
 // 0x48BFC8
-int obj_toggle_open(Object* obj)
+int obj_toggle_open(Object* target)
 {
-    if (obj == NULL) {
+    if (target == NULL) {
         return -1;
     }
 
-    if (!obj_is_openable(obj)) {
+    if (!obj_is_openable(target)) {
         return -1;
     }
 
-    if (obj_is_locked(obj)) {
+    if (obj_is_locked(target)) {
         return -1;
     }
 
-    obj_unjam_lock(obj);
+    obj_unjam_lock(target);
 
     register_begin(ANIMATION_REQUEST_RESERVED);
 
-    if (obj->frame != 0) {
-        register_object_must_call(obj, obj, (AnimationCallback*)set_door_state_closed, -1);
+    if (target->frame != 0) {
+        register_object_must_call(target, target, (AnimationCallback*)set_door_state_closed, -1);
 
-        const char* sfx = gsnd_build_open_sfx_name(obj, SCENERY_SOUND_EFFECT_CLOSED);
-        register_object_play_sfx(obj, sfx, -1);
+        const char* sfx = gsnd_build_open_sfx_name(target, SCENERY_SOUND_EFFECT_CLOSED);
+        register_object_play_sfx(target, sfx, -1);
 
-        register_object_animate_reverse(obj, ANIM_STAND, 0);
+        register_object_animate_reverse(target, ANIM_STAND, 0);
     } else {
-        register_object_must_call(obj, obj, (AnimationCallback*)set_door_state_open, -1);
+        register_object_must_call(target, target, (AnimationCallback*)set_door_state_open, -1);
 
-        const char* sfx = gsnd_build_open_sfx_name(obj, SCENERY_SOUND_EFFECT_OPEN);
-        register_object_play_sfx(obj, sfx, -1);
-        register_object_animate(obj, ANIM_STAND, 0);
+        const char* sfx = gsnd_build_open_sfx_name(target, SCENERY_SOUND_EFFECT_OPEN);
+        register_object_play_sfx(target, sfx, -1);
+        register_object_animate(target, ANIM_STAND, 0);
     }
 
-    register_object_must_call(obj, obj, (AnimationCallback*)check_door_state, -1);
+    register_object_must_call(target, target, (AnimationCallback*)check_door_state, -1);
 
     register_end();
 
